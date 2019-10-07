@@ -1,44 +1,27 @@
+MySQL Innodb Cluster Demo for Database team
+===================
 
-option + command + o   
 
-to show preview on Chrome.
+Description
+-----------
 
-MySQL Innodb Cluster
+In this demo, I will show 3 MySQL Servers + 1 MySQL Router on local vagrant centos7 virtual box.
 
-https://www.percona.com/blog/2018/07/09/innodb-cluster-in-a-nutshell-part-1/
+* [MySQL Cluster Diagram](https://www.percona.com/blog/2018/07/09/innodb-cluster-in-a-nutshell-part-1/)
 
-3 MySQL Servers + 1 MySQL Router on local vagrant centos7 virtual box. 
 
----------------------------------------------
-1. Startup Cluster
+Startup Cluster
+------------
 
-2. Transaction test
+##### Startup vagrant 
 
-  - Create/Drop table
-  - Insert/Update/Delete Data.
-  
-3. Disaster Recovery 
+Set Vagrantfile and start up all linux boxes on local laptop.
 
-  - Start pinging cluster
-  - Shutdown first one
-  - Shutdown Second one
-  - Shutdown 2 of them
-  
-4. Cluster Maintenance  
-  - Add 1 cluster node. 
-  - Remove 1 cluster node.
-
-5. Create Cluster from scratch
-
-###########################################
-1. Startup Cluster
-###########################################
-
-1. Vagrant up for all linux boxes on local laptop.
-
+```
 cd ~/work/mc2
 vi Vagrantfile
-####
+---
+
 Vagrant.configure(2) do |config|
 
 config.vm.synced_folder "/Users/kyamada_macbookpro/work/mc2", "/vagrant", type:"virtualbox"
@@ -90,44 +73,54 @@ node.vm.network :private_network, ip: "192.168.40.110", virtualbox__intnet: "int
 end
 
 end
-####
+---
+```
+Run vagrant up
 
-
+```
+cd ~/work/mc2
 vagant up 
+```
 
-2. Restart Mysql all 3 instances
+##### Restart Mysql on all 3 instances
 
+```
 vagrant ssh node1
 sudo su - 
 systemctl restart mysqld
+```
 
--> Do the same for node2 & node3.
+Do the same for node2 & node3.
 
-3. Restart router
+##### Restart MySQL router
 
+```
 vagant ssh router1
 sudo systemctl restart mysqlrouter
+```
 
+##### Restart MySQL Cluster 
+
+```
 mysqlsh
 \c root@node1
-cluster=dba.getCluster()
-
--> It will show error. Then issue following command. 
-
 dba.rebootClusterFromCompleteOutage()
-y
-y
-y
 
+```
+Check cluster status if it comes up.
+
+```
 cluster=dba.getCluster()
 cluster.status()
 
-=>  https://www.percona.com/blog/2018/07/09/innodb-cluster-in-a-nutshell-part-1/
+```
 
-###########################################
-2. Transaction test from mysql 
-###########################################
+Test Transaction from mysql client
+------------
 
+Make sure we can create table/insert data and select from database.
+
+```
 vagrant ssh node1 
 
 mysql -u root -p
@@ -140,6 +133,7 @@ select * from test.test3;
 
 select @@hostname;
 
+
 vagrant ssh node2
 mysql -u root -p
 use test;
@@ -149,14 +143,19 @@ vagrant ssh node3
 mysql -u root -p
 use test;
 select * from test3;
+```
 
 
------------------------------
+MySQL Shell
+------------
 
+Connect to router1
+```
 vagrant ssh router1
+```
 
-mysqlsh    => Ctrl+D to exit. 
-
+Login by mysql shell. You can do Ctrl+D to exit. 
+```
 mysqlsh 
 \c root@192.168.40.10
 \c root@node1
@@ -164,8 +163,11 @@ mysqlsh
 mysqlsh root@192.168.40.10
 mysqlsh root@node1
 
+```
+
 Port 6446 for Read/Write
 
+```
 mysqlsh --uri root@localhost:6446 --sql 
 
 mysqlsh --uri root@router1:6446 --sql 
@@ -177,17 +179,21 @@ select * from test3;
 
 delete from test.test3;
 select * from test3;
+```
 
 ----
 Port 6447 for Read only.
 
+```
 mysqlsh --uri root@router1:6447 --sql 
 
 select * from test3;
 insert into test.test3(col2) values ('This is test');
 drop table test.test3;
+```
 
-
+Various ways to login and run select statement from command line.
+```
 mysqlsh --uri root@localhost:6446 --sql -e "select @@hostname"
 mysqlsh --uri root@localhost:6447 --sql -e "select @@hostname"
 
@@ -198,19 +204,26 @@ mysqlsh --uri root@192.168.40.100:6446 --password=test1234 --sql -e "select @@ho
 mysqlsh --uri root@localhost:6447 --password=test1234 --sql -e "select @@hostname"
 mysqlsh --uri root@router1:6447 --password=test1234 --sql -e "select @@hostname"
 mysqlsh --uri root@192.168.40.100:6447 --password=test1234 --sql -e "select @@hostname"
+```
 
+Disaster Recovery 
+------------
 
-##############################################################################
-3. Disaster Recovery 
-##############################################################################
+Started to ping cluster. It should survive till the end of demo.
 
-1. Started ping cluster. It should survive till the end.
-
+Login to router2.
+```
 vagrant ssh router2
+```
+
+Create ping_router.sh 
+
+```
 sudo su - 
 cd /vagrant
 
-vi test.sh
+vi ping_router.sh
+---
 i=1
 ret=1
 
@@ -227,116 +240,140 @@ do
         sleep 2
     fi
 done
+---
 
-chmod 755 test.sh
-./test.sh
+chmod 755 ping_router.sh
+./ping_router.sh
+```
 
-2. Shutdown node3 
+##### Shutdown node3 
 
+```
 vagrant ssh node3 
 sudo su - 
 systemctl stop mysqld
 
-=> Watch log of test.sh. It will show 1 error and start connecting node2 instead.
+```
+Watch log of ping_router.sh. It will show 1 error and start connecting node2 instead.
+You can see node3 became "MISSING" by checking status of the cluster.
 
+```
 vagrant ssh router1
 
 mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.status()
 
-=> node3 became "MISSING"
+```
 
-3. Start up node3
+##### Start up node3
 
+```
 vagrant ssh node3 
 sudo su - 
 systemctl start mysqld
+```
+Watch log of ping_router.sh. It will start connecting node3 again. Cluster status of node3 become "ONLINE" automatically.
 
-=> Watch log of test.sh. It will start connecting node3 again. 
-
+```
 mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.status()
+```
 
-=> cluster status of node3 become "ONLINE" automatically.
+##### Shutdown node1 
 
-4. Shutdown node1 
-
+```
 vagrant ssh node1
 sudo su - 
 systemctl stop mysqld
+```
+Watch log of ping_router.sh. Writing of test table never stops.But it only select from node3 since node2 became writeable. 
 
-=> Watch log of test.sh. Writing of test table never stops. 
-   But it only select from node3 since node2 became writeable. 
-   
+```   
 mysqlsh root@node2
 cluster=dba.getCluster()
 cluster.status()   
+```
+Cluster status of node1 becomes "MISSING" and mode of node2 becomes "R/W".
 
-=> Cluster status of node1 becomes "MISSING" and mode of node2 becomes "R/W".
+##### Start up node1 
 
-5. Start node1 
-
+```
 vagrant ssh node1
 sudo su - 
 systemctl start mysqld
+```
+Watch log of ping_router.sh. It starts selecting from node1 as a ReadOnly site. 
 
-=> Watch log of test.sh. It starts selecting from node1 as a ReadOnly site. 
-   
+```
 mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.status() 
+```
+node1 joins cluster with "ReadOnly" mode and node2 stays as Writeable node. 
 
-=> node1 joins cluster with "ReadOnly" mode and node2 stays as Writeable node. 
+##### Shutdown node2(R/W) and node3(R/O)
 
-6. Shutdown node2(R/W) and node3(R/O)
-
-vagrant ssh node2 and node3
+```
+vagrant ssh node2
 sudo su - 
 systemctl stop mysqld
 
-=> Watch log of test.sh. It shows a error and recover quickly. It only select from node1
-   and insert it going on. 
-   
+vagrant ssh node3
+sudo su - 
+systemctl stop mysqld
+
+```
+Watch log of ping_router.sh. It shows a error and recover quickly. It only select from node1 and insert is going on. 
+
+```
 mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.status()
+```
+node1 becomes writeable node and 2 others become MISSING. 
 
-=> node1 becomes writeable node and 2 others become MISSING. 
+##### Startup node2 and node3. 
 
-7. Startup node2 and node3. 
-
-vagrant ssh node2 and node3
+```
+vagrant ssh node2
 sudo su - 
 systemctl start mysqld
 
-=> Watch log of test.sh. It starts selecting from node2 and node3.
-   And insert is still going on. 
-   
+vagrant ssh node3
+sudo su - 
+systemctl start mysqld
+```
+
+Watch log of ping_router.sh. It starts selecting from node2 and node3. And insert is still going on. 
+
+```
 mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.status()
+```
+node2 and node3 will be added as R/O node.
 
-=> node2 and node3 will be added as R/O node.
+Cluster Maintenance  
+------------
 
-##############################################################################
-4. Cluster Maintenance  
-##############################################################################
-
-1. Check mysql on node4.
+##### Check mysql on node4
 
 mysql is installed on node4 and root password is test to test1234. 
 
+```
 vagrant ssh node4
 
 mysql -u root -ptest1234
 use test;
 
 test database is not created yet. 
+```
 
-2. Add node4 into cluster. 
+##### Add node4 into cluster
 
+```
 vagrant ssh router1
 
 mysqlsh
@@ -345,24 +382,32 @@ dba.checkInstanceConfiguration('root@node4')
 dba.configureInstance('root@node4')
 y
 y
+```
 
+```
 mysqlsh
 \c root@node1
 cluster = dba.getCluster()
 cluster.status()
 cluster.addInstance('root@node4')
 
-=> Watch log of test.sh. It starts selecting from node4. 
+```
 
+Watch log of ping_router.sh. It starts selecting from node4. Login to node4 and check database/table are cloned.
+
+```
 vagrant ssh node4
 mysql -uroot -p
 
 select * from test.test2;
+```
 
-=> Table is copied from other node. 
+Table is copied from other node. 
 
-2. Remove 1 node. 
 
+##### Remove 1 node. 
+
+```
 vagrant ssh router1
 
 mysqlsh root@node1 
@@ -370,17 +415,22 @@ mysqlsh root@node1
 cluster=dba.getCluster()
 cluster.removeInstance('root@node3:3306')
 
-=> Watch log of test.sh. It starts selecting from node2 & node4. 
+```
 
+Watch log of ping_router.sh. It starts selecting from node2 & node4. 
+
+```
 cluster.status()
+```
 
-=> It doesn't show node3 any more. 
+It doesn't show node3 any more. 
 
--- Reset for Demo 
-
+##### Reset for Another Demo 
+```
 cluster.addInstance('root@node3')
 cluster.removeInstance('root@node4:3306')
-
+```
+```
 node4
 sudo systemctl restart mysqld
 
@@ -388,18 +438,18 @@ mysql -uroot -p
 drop database test;
 
 sudo systemctl stop mysqld
+```
 
 
+Create Cluster from scratch
+------------
 
-##############################################################################
-5. Create Cluster from scratch
-##############################################################################
+##### Remove instance from Mysql nodes
 
-1. Remove instance from Mysql nodes
-
-cd ~/work/mc2
+```
 vagrant ssh node1
-
+```
+```
 sudo su - 
 systemctl stop mysqld
 
@@ -410,7 +460,9 @@ rm -Rf /var/lib/mysql
 systemctl start mysqld
 
 grep temporary /var/log/mysqld.log
-
+```
+Copy & Paste new password to mysql command below. 
+```
 mysql -uroot -p'tXkGaw9LfX?!'
  
 ALTER USER root@localhost IDENTIFIED BY 'Npn8csyb!?';
@@ -425,24 +477,25 @@ grant all on *.* to 'root'@'%' with grant option;
 exit;
 mysql -uroot -ptest1234
 exit;
+```
+Do the same for node2,3,4,5. Empty MySQL server has been setup on node1-5. And root user accepts connection from any server with root/test1234. 
 
-=> Do the same for node2,3,4,5
-   Empty MySQL server has been setup on node1-5. 
-   And root user accepts connection from any server with easy password. 
-
-2. Stop mysqlrouter on rnode1
-
+##### Stop mysqlrouter on router1
+```
 vagrant ssh router1 
 sudo systemctl stop mysqlrouter
-
-=> Check log of test.sh 
+```
+Check log of ping_router.sh 
 
 
 Cluster Setup
---------------------------------------------------------------------
-1. Edit /etc/hosts for all instances.
+------------
 
+##### Edit /etc/hosts for all instances.
+
+```
 sudo vi /etc/hosts
+---
 192.168.40.10 node1
 192.168.40.20 node2
 192.168.40.30 node3
@@ -452,84 +505,102 @@ sudo vi /etc/hosts
 192.168.40.110 router2
 192.168.40.200 master
 192.168.40.210 slave
+---
+```
 
-2. Disable selinux、iptables、ip6tables on all instances.
+##### Disable selinux、iptables、ip6tables on all instances.
 
 sudo setenforce 0
 sudo sed -i -e 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
 
-3. Check Group Replication on router1 
+##### Check Group Replication on router1 
 
+```
 vagrant ssh router1 
 
 mysqlsh
 dba.checkInstanceConfiguration('root@node1')
 dba.checkInstanceConfiguration('root@node2')
 dba.checkInstanceConfiguration('root@node3')
+```
 
-4. Configure Group Replication
+##### Configure Group Replication
 
+```
 dba.configureInstance('root@node1')
 
 Enter "y" for perform configration. 
 Enter "y" for restart after configration.
+```
 
-=> Check instance again. It says "ok" for status.
+Check instance again. It says "ok" for status.
+```
 dba.checkInstanceConfiguration('root@node1')
+```
 
-Repeat this for others servers. 
+Repeat this for node2 and node3. 
+```
 dba.configureInstance('root@node2')
 dba.configureInstance('root@node3')
+```
 
-5. Create cluster and add nodes
-Command list: http://masato.ushio.org/blog/index.php/2017/04/23/uco-tech_how-to-use-innodb-cluster/
+##### Create cluster and add nodes
 
+* [MySQL shell Command list:](http://masato.ushio.org/blog/index.php/2017/04/23/uco-tech_how-to-use-innodb-cluster/)
+
+```
 mysqlsh
 \c root@node1
 cluster = dba.createCluster('mycluster')
 cluster.status()
+```
+You can see node1 is only database for cluster.
 
- => You can see node1 is only 1 node for cluster.
-
+```
 cluster.addInstance('root@node2')
+```
+Enter "C" for select "Clone". Check if node2 is added.
 
-
-Enter "C" for select "Clone"
-Check if node2 is added.
-
+```
 cluster.status()
+```
 
 Add node3 
-
+```
 cluster.addInstance('root@node3')
-
+```
 Enter "C" for select "Clone"
-
+```
 cluster.status()
-
- => mysql innodb cluster are created with 3 nodes. 
+```
+mysql innodb cluster are created with 3 nodes. 
  
+```
+vagrant ssh node1 
 
 mysql -uroot -p
 select user,host from mysql.user;
+```
+Users for clusters are created. 
 
- => Users for clusters are created. 
- 
+``` 
  show databases; 
+```
+Database: mysql_innodb_cluster_metadata is created.
 
- => Database: mysql_innodb_cluster_metadata is created.
-  
+```  
  sudo cat /var/lib/mysql/mysqld-auto.cnf  
+```
+mysqld-auto.conf is set. 
 
- => mysqld-auto.conf is set. 
+##### Test replication of 3 nodes.
 
-6. Test replication of 3 nodes.
+Cluster is configured for 3 nodes. node1 is RW. node2 & 3 are read only. If I connect to node1 and create table, it will be replicated to node2 & node3.
 
- => Cluster is configured for 3 nodes. node1 is RW. node2 & 3 are read only. 
-    If I connect to node1 and create table, it will be replicated to 2 & 3.
-
+```
 vagrant ssh node1
-
+```
+```
 mysql -uroot -p
 create database test;
 use test;
@@ -538,31 +609,45 @@ insert into test1(col2) values (rand());
 insert into test1(col2) select col2 from test1;
 insert into test1(col2) select col2 from test1;
 insert into test1(col2) select col2 from test1;
+```
+Check if data is replicated to node2 and node3.
 
-=> Check if data is replicated to node2 and node3.
-
+```
+vagrant ssh node2
+mysql -uroot -p
 select * from test.test1;
+```
 
-7. Install & Start Mysql Router
- 
+##### Install & Start Mysql Router
+Login to router1
+```
 vagrant ssh router1
-
+```
+Install MySQL Router
+```
 sudo yum install -y mysql-router 
-
+```
+Configure MySQL Router for existing cluster. 
+```
 sudo mysqlrouter --bootstrap root@node1 --user=mysqlrouter
-
+```
+Start MySQL Router
+```
 sudo systemctl start mysqlrouter
 ps -ef | grep router
+```
 
-8. Check connection though mysql router.
-
+##### Check connection through mysql router.
+```
 mysqlsh --uri root@localhost:6446 -ptest1234 --sql -e "select @@hostname"
 
 mysqlsh --uri root@localhost:6447 -ptest1234 --sql -e "select @@hostname"
+```
 
+##### Insert Select Checking
 
-9. Insert Select Checking
-
+Create application on cluster and create test table.
+```
 vagrant ssh node1 
 
 mysql -uroot -ptest1234 -hnode1
@@ -577,14 +662,19 @@ create database test;
 create table test.test2(col1 int auto_increment primary key
 ,col2 char(25)
 ,col3 datetime);
+```
 
-
+Login to router2 and setup ping_router.sh 
+```
 vagrant ssh router2
+```
 
+```
 sudo su - 
 cd /vagrant
 
-vi test.sh
+vi ping_router.sh
+---
 i=1
 ret=1
 
@@ -601,14 +691,14 @@ do
         sleep 2
     fi
 done
+---
 
+chmod 755 ping_router.sh
+./ping_router.sh
+```
 
-chmod 755 test.sh
-./test.sh
-
-
-10. Add 2nd router. 
-
+##### Add 2nd router
+```
 vagrant ssh router2
 
 sudo yum install -y mysql-router 
@@ -617,19 +707,22 @@ sudo mysqlrouter --bootstrap root@node1 --user=mysqlrouter
 
 sudo systemctl start mysqlrouter
 ps -ef | grep router
+```
 
-8. Check connection though mysql router.
+##### Check connection though 2nd mysql router.
 
+vagrant ssh router2
 mysqlsh --uri root@localhost:6446 -ptest1234 --sql -e "select @@hostname"
 
 mysqlsh --uri root@localhost:6447 -ptest1234 --sql -e "select @@hostname"
 
 
-Setup Mysqlrouter @ application server is the simple solution. 
-=> https://lefred.be/content/mysql-innodb-cluster-is-the-router-a-single-point-of-failure/
+Setup Mysqlrouter @ application server is the simple solution.   
+* [MySQL Router Setup](https://lefred.be/content/mysql-innodb-cluster-is-the-router-a-single-point-of-failure/)
 
-11. Add node4, node5
 
+##### Add node4, node5
+```
 vagrant ssh router1 
 
 mysqlsh
@@ -655,31 +748,38 @@ cluster.status()
 
 cluster.removeInstance('root@node4:3306')
 cluster.removeInstance('root@node5:3306')
+```
 
-
+##### Stop vagrant 
+```
 cd ~/work/mc2
 vagrant halt
+```
 
--------------------------------------------
 Install PHP and ping cluster
--------------------------------------------
+------------
 
+```
 vagrant ssh router2
 sudo su - 
 yum update
+```
 
 PHP 7.1.32 (cli) (built: Aug 28 2019 13:15:08) ( NTS ) will be installed.
 
+```
 yum install -y epel-release
 rpm -Uvh http://rpms.famillecollet.com/enterprise/remi-release-7.rpm
 yum remove php-*
 yum install -y --enablerepo=remi,remi-php71 php php-mysqlnd php-devel php-mbstring php-pdo php-gd php-xml php-mcrypt
 php -v
+```
 
+```
 cd /vagrant 
 
 vi ping.php
--------------
+---
 <?php
 $servername = "router1";
 $username = "kyamada";
@@ -746,13 +846,14 @@ while(1) {
 $conn->close();
 
 ?>             
--------
+---
+```
 
-
-MySQL Router configuration.
-
-
-
+Run ping_router.php. You can see it insert/select from R/W and R/O nodes.
+```
+cd /vagrant
+php ping_router.php
+```
 
 
 
