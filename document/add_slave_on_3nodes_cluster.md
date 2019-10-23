@@ -71,31 +71,31 @@ mysqlsh root@node1
 
 \sql
 SET PERSIST validate_password.policy = 0;
-SET PERSIST server_id=10;
-SET PERSIST_ONLY gtid_mode=ON;
-SET PERSIST_ONLY enforce_gtid_consistency=true;
+##SET PERSIST server_id=10;
+##SET PERSIST_ONLY gtid_mode=ON;
+##SET PERSIST_ONLY enforce_gtid_consistency=true;
 restart;
 
 \c root@node2
 
 SET PERSIST validate_password.policy = 0;
-SET PERSIST server_id=20;
-SET PERSIST_ONLY gtid_mode=ON;
-SET PERSIST_ONLY enforce_gtid_consistency=true;
+##SET PERSIST server_id=20;
+##SET PERSIST_ONLY gtid_mode=ON;
+##SET PERSIST_ONLY enforce_gtid_consistency=true;
 restart;
 
 \c root@node3
 
 SET PERSIST validate_password.policy = 0;
-SET PERSIST server_id=30;
-SET PERSIST_ONLY gtid_mode=ON;
-SET PERSIST_ONLY enforce_gtid_consistency=true;
+##SET PERSIST server_id=30;
+##SET PERSIST_ONLY gtid_mode=ON;
+##SET PERSIST_ONLY enforce_gtid_consistency=true;
 restart;
 
 \c root@node1
 \js
-cluster=dba.getCluster()
-cluster.status()
+cluster=dba.getCluster();
+cluster.status();
 
 ```
 Remove existing database on new slave(node4)
@@ -122,7 +122,7 @@ grep temporary /var/log/mysqld.log
 ```
 Copy & Paste new password to mysql command below. 
 ```
-mysql -uroot -p'<outX(k6CTS0'
+mysql -uroot -p'=AN<zkO!6wh7'
 
 ALTER USER root@localhost IDENTIFIED BY 'Npn8csyb!?';
 SET GLOBAL validate_password.policy = 0;
@@ -162,6 +162,8 @@ grant REPLICATION SLAVE on *.* to repl@node4 with grant option;
 vagrant ssh node4
 sudo su - 
 mysql -urepl -ptest1234 -hnode1
+mysql -urepl -ptest1234 -hnode2
+mysql -urepl -ptest1234 -hnode3
 
 ```
 
@@ -208,7 +210,7 @@ mysql -u root -ptest1234 < /vagrant/node1_dump.sql
 ```
 vagrant ssh node4
 
-mysql -u root -p
+mysql -u root -ptest1234
 
 CHANGE MASTER TO
  MASTER_HOST='node1',
@@ -226,12 +228,12 @@ show slave status\G
 ```
 vagrant ssh node4
 
-mysql -u root -p
+mysql -u root -ptest1234
 
 stop slave;
 
 CHANGE MASTER TO
- MASTER_HOST='node2,
+ MASTER_HOST='node2',
  MASTER_PORT=3306,
  MASTER_USER='repl',
  MASTER_PASSWORD='test1234',
@@ -256,7 +258,7 @@ CHANGE MASTER TO
  MASTER_USER='repl',
  MASTER_PASSWORD='test1234',
  master_auto_position=1;
- 
+
 start slave;
 show slave status\G
 ```
@@ -278,12 +280,11 @@ Start Mysql and initialize password
 
 ```
 systemctl start mysqld
-
 grep temporary /var/log/mysqld.log
 ```
 Copy & Paste new password to mysql command below. 
 ```
-mysql -uroot -p'Jhj/:B&xJ7(X'
+mysql -uroot -p'SglBj5FfoW.b'
 
 ALTER USER root@localhost IDENTIFIED BY 'Npn8csyb!?';
 SET GLOBAL validate_password.policy = 0;
@@ -292,7 +293,10 @@ ALTER USER root@localhost IDENTIFIED BY 'test1234';
 create user 'root'@'%' identified by 'test1234';
 grant all on *.* to 'root'@'%' with grant option;
 
-set persist validate_password.policy = 0;
+SET PERSIST validate_password.policy = 0;
+SET PERSIST server_id=50;
+SET PERSIST_ONLY gtid_mode=ON;
+SET PERSIST_ONLY enforce_gtid_consistency=true;
 restart;
 exit;
 ```
@@ -306,30 +310,39 @@ exit;
 Create user repl for node5(192.168.40.50).
 ```
 
-vagrant ssh router1
+vagrant ssh node1
 
 mysqlsh root@node1 --sql
 
 create user repl@node5 identified by 'test1234';
 grant REPLICATION SLAVE on *.* to repl@node5 with grant option;
 
-```
-##### Set replication parameter on node5
-```
 vagrant ssh node5
+mysql -uroot -ptest1234 -hnode1
 
-mysql -uroot -ptest1234
-SET PERSIST validate_password.policy = 0;
-SET PERSIST server_id=40;
-SET PERSIST_ONLY gtid_mode=ON;
-SET PERSIST_ONLY enforce_gtid_consistency=true;
-restart;
 ```
+
+##### Take dump again
+
+vagrant ssh node1
+sudo su - 
+
+```
+mysqldump -u root -p \
+--all-databases \
+--events \
+--single-transaction \
+--flush-logs \
+--master-data=2 \
+--hex-blob \
+--default-character-set=utf8 > /vagrant/node1_dump2.sql
+```
+
 ##### Import node1 data into node5
 ```
 vagrant ssh node5
 sudo su - 
-mysql -u root -p < /vagrant/node1_dump.sql
+mysql -u root -p < /vagrant/node1_dump2.sql
 ```
 => Since gtid-mode=ON, we don't have to check binlog and log position. 
 
@@ -338,7 +351,7 @@ mysql -u root -p < /vagrant/node1_dump.sql
 ```
 vagrant ssh node5
 
-mysql -u root -p
+mysql -u root -ptest1234
 
 CHANGE MASTER TO
  MASTER_HOST='node1',
@@ -350,6 +363,12 @@ CHANGE MASTER TO
 start slave;
 show slave status\G
 ```
+
+
+replicate-do-db=dx
+
+v8 : slave of slave   1
+v5.7 - v8 :           4
 
 
 

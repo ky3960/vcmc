@@ -94,7 +94,7 @@ syncbinlog.sh   => Please refer vcmc/document/syncbinlog.sh
 ```
 sudo su - 
 cd /vagrant
-nohup ./syncbinlog.sh --backup-dir=/backup/binlog/node1 --prefix="mybackup-" --compress --rotate=10 > binlog_node3.log 2>&1 &
+nohup ./syncbinlog.sh --backup-dir=/backup/binlog/node1 --prefix="mybackup-" --compress --rotate=10 > binlog_node1.log 2>&1 &
 ```
 
 => You might have to delete 1st binlog
@@ -158,7 +158,7 @@ Backup will be created under /backup/vcmc-node1-YYYY-MM-DD.sql
 ```
 vagrant ssh node1 
 sudo su - 
-ls -ltr /var/lib/mysql
+ls -ltr /var/lib/mysql/binlog*
 ```
 => Check latest binlog. 
 
